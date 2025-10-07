@@ -1,0 +1,11 @@
+input,time_complexity,time,cpu,arch,program,cache_on
+1,n^3,0.000012,Cortex-R5F,arm32,KF,1
+10,n^3,0.000050,Cortex-R5F,arm32,KF,1
+19,n^3,0.000249,Cortex-R5F,arm32,KF,1
+28,n^3,0.000796,Cortex-R5F,arm32,KF,1
+37,n^3,0.002032,Cortex-R5F,arm32,KF,1
+1,n^3,0.000011,Cortex-R5F,arm32,KF,1
+10,n^3,0.000050,Cortex-R5F,arm32,KF,1
+19,n^3,0.000255,Cortex-R5F,arm32,KF,1
+28,n^3,0.000824,Cortex-R5F,arm32,KF,1
+37,n^3,0.002054,Cortex-R5F,arm32,KF,1
