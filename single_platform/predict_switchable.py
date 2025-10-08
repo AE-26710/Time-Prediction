@@ -19,10 +19,10 @@ import scipy.stats as stats
 
 # ========== 配置区 ==========
 # Matrix_Multiply | FFT | KF
-predicted_app = 'Matrix_Multiply'
+predicted_app = 'KF'
 host_cpu = 'Cortex-R5F'
-# random_forest | random_forest_tuned | svr | svr_tuned | mlp_tuned | poly3 | curve_fit3 | xgboost | xgboost_tuned | lasso_poly3
-PREDICT_METHOD = 'xgboost_tuned'
+# random_forest | random_forest_tuned | svr | svr_tuned | mlp_tuned | curve_fit | xgboost | xgboost_tuned | hybrid
+PREDICT_METHOD = 'hybrid'
 
 # ========== 数据准备 ==========
 data = pd.read_csv("exclusive_runtime.csv")
@@ -54,12 +54,24 @@ if PREDICT_METHOD == 'random_forest':
     oob_score：是否使用袋外样本估算泛化精度，默认False。
     criterion：分裂节点的指标，回归中常用“squared_error”（均方误差）。
     """
-    model = RandomForestRegressor(
-        n_estimators=100,
-        random_state=2,
-        )
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
+    if predicted_app == 'FFT':
+        # Feature engineering: add N*log2(N) feature for FFT
+        X_fe = host_data[['input']].copy()
+        X_fe['n_log_n'] = X_fe['input'] * np.log2(X_fe['input'])
+        X_train_fe, X_test_fe, y_train_fe, y_test_fe = train_test_split(X_fe, host_data['time'], test_size=0.1, random_state=6)
+        model = RandomForestRegressor(n_estimators=200, random_state=2)
+        model.fit(X_train_fe[['n_log_n']], y_train_fe)
+        y_pred = model.predict(X_test_fe[['n_log_n']])
+        # ensure later evaluation uses the corresponding y_true
+        X_test = X_test_fe[['input']]
+        y_true = y_test_fe
+    else:
+        model = RandomForestRegressor(
+            n_estimators=100,
+            random_state=2,
+            )
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
 
 elif PREDICT_METHOD == 'random_forest_tuned':
     # 随机森林自动调参（RandomizedSearchCV）
@@ -84,10 +96,21 @@ elif PREDICT_METHOD == 'random_forest_tuned':
         n_jobs=-1,
         verbose=1
     )
-    # 注意这里我们没有对 X 做额外变换（已在顶部对 input 做了 StandardScaler）；随机森林本身不敏感于缩放
-    rnd_rf.fit(X_train, y_train)
-    print('Best params (random_forest_tuned):', rnd_rf.best_params_)
-    y_pred = rnd_rf.predict(X_test)
+    # For FFT use feature engineering; otherwise use original features
+    if predicted_app == 'FFT':
+        X_fe = host_data[['input']].copy()
+        X_fe['n_log_n'] = X_fe['input'] * np.log2(X_fe['input'])
+        X_train_fe, X_test_fe, y_train_fe, y_test_fe = train_test_split(X_fe, host_data['time'], test_size=0.1, random_state=6)
+        rnd_rf.fit(X_train_fe[['n_log_n']], y_train_fe)
+        print('Best params (random_forest_tuned, FFT):', rnd_rf.best_params_)
+        y_pred = rnd_rf.predict(X_test_fe[['n_log_n']])
+        X_test = X_test_fe[['input']]
+        y_true = y_test_fe
+    else:
+        # 注意这里我们没有对 X 做额外变换（已在顶部对 input 做了 StandardScaler）；随机森林本身不敏感于缩放
+        rnd_rf.fit(X_train, y_train)
+        print('Best params (random_forest_tuned):', rnd_rf.best_params_)
+        y_pred = rnd_rf.predict(X_test)
 
 elif PREDICT_METHOD == 'svr':
     """
@@ -131,6 +154,7 @@ elif PREDICT_METHOD == 'svr_tuned':
         n_jobs=-1,
         verbose=1
     )
+
     rnd_svr.fit(X_train_scaled, y_train)
     print('Best params (svr_tuned):', rnd_svr.best_params_)
     y_pred = rnd_svr.predict(X_test_scaled)
@@ -168,27 +192,36 @@ elif PREDICT_METHOD == 'mlp_tuned':
     # 预测并还原目标变换
     y_pred = rnd.predict(X_test_s)
 
-elif PREDICT_METHOD == 'poly3':
-    # 三次多项式回归
-    if predicted_app == 'KF' or predicted_app == 'Matrix_Multiply':
-        poly = PolynomialFeatures(
-            degree=3, 
-            include_bias=True
-            )
-        
-    X_train_poly = poly.fit_transform(X_train)
-    X_test_poly = poly.transform(X_test)
-    model = LinearRegression()
-    model.fit(X_train_poly, y_train)
-    y_pred = model.predict(X_test_poly)
+elif PREDICT_METHOD == 'curve_fit':
+    # 三次多项式 / 复杂度模型曲线拟合
+    X_train_cf = X_train[features[0]].values if isinstance(X_train, pd.DataFrame) else X_train
+    y_train_cf = y_train.values if hasattr(y_train, 'values') else y_train
+    X_test_cf = X_test[features[0]].values if isinstance(X_test, pd.DataFrame) else X_test
 
-elif PREDICT_METHOD == 'curve_fit3':
-    # 三次多项式曲线拟合
     if predicted_app == 'KF' or predicted_app == 'Matrix_Multiply':
+        # cubic complexity T(N) = a*N^3 + b*N^2 + c*N + d
         def cubic_func(N, a, b, c, d):
-            return a*N**3 + b*N**2 + c*N + d
-    params, _ = curve_fit(cubic_func, X_train.values.flatten(), y_train)
-    y_pred = cubic_func(X_test.values.flatten(), *params)
+            return a * N**3 + b * N**2 + c * N + d
+        params, _ = curve_fit(cubic_func, X_train_cf, y_train_cf)
+        y_pred = cubic_func(X_test_cf, *params)
+        a_fit, b_fit, c_fit, d_fit = params
+        print(f"拟合公式 (cubic): T(N) = {a_fit} * N^3 + {b_fit} * N^2 + {c_fit} * N + {d_fit:.6f}")
+
+    elif predicted_app == 'FFT':
+        # FFT complexity T(N) = a * N * log2(N) + b
+        def fft_complexity(N, a, b):
+            return a * N * np.log2(N) + b
+        params, _ = curve_fit(fft_complexity, X_train_cf, y_train_cf)
+        y_pred = fft_complexity(X_test_cf, *params)
+        a_fit, b_fit = params
+        print(f"拟合公式 (fft): T(N) = {a_fit} * N log2(N) + {b_fit:.6f}")
+
+    else:
+        # fallback: try cubic
+        def cubic_func(N, a, b, c, d):
+            return a * N**3 + b * N**2 + c * N + d
+        params, _ = curve_fit(cubic_func, X_train_cf, y_train_cf)
+        y_pred = cubic_func(X_test_cf, *params)
 
 elif PREDICT_METHOD == 'xgboost':
     """
@@ -215,7 +248,6 @@ elif PREDICT_METHOD == 'xgboost':
     y_pred = model.predict(X_test)
 
 elif PREDICT_METHOD == 'xgboost_tuned':
-    # 使用 RandomizedSearchCV 对 XGBRegressor 进行超参搜索
     xgb = XGBRegressor(objective='reg:squarederror', random_state=2, verbosity=0)
     param_dist_xgb = {
         'n_estimators': stats.randint(50, 1000),
@@ -237,34 +269,51 @@ elif PREDICT_METHOD == 'xgboost_tuned':
         n_jobs=-1,
         verbose=1
     )
-    # XGBoost 通常对未缩放的特征表现良好，但因为我们的特征只是单个 input，任何缩放影响有限
     rnd_xgb.fit(X_train, y_train)
     print('Best params (xgboost_tuned):', rnd_xgb.best_params_)
     y_pred = rnd_xgb.predict(X_test)
 
-elif PREDICT_METHOD == 'lasso_poly3':
-    # 将 input 扩展为 1, N, N^2, N^3 的多项式特征，然后用 LassoCV 自动选择 alpha
-    poly = PolynomialFeatures(degree=3, include_bias=False)
-    X_train_poly = poly.fit_transform(X_train)
-    X_test_poly = poly.transform(X_test)
-    # 对多项式特征进行标准化
-    scaler_poly = StandardScaler()
-    X_train_poly_scaled = scaler_poly.fit_transform(X_train_poly)
-    X_test_poly_scaled = scaler_poly.transform(X_test_poly)
-    # 使用 LassoCV 自动交叉验证选择正则化强度 alpha
-    lasso_cv = LassoCV(cv=5, max_iter=10000, random_state=2)
-    lasso_cv.fit(X_train_poly_scaled, y_train)
-    y_pred = lasso_cv.predict(X_test_poly_scaled)
-    print(f"Selected alpha (LassoCV): {lasso_cv.alpha_}")
-    # 尝试打印各项系数对应的特征名（兼容不同 sklearn 版本）
-    try:
-        feature_names = poly.get_feature_names_out(features)
-    except Exception:
-        feature_names = poly.get_feature_names(features)
-    coef_info = [(name, coef) for name, coef in zip(feature_names, lasso_cv.coef_)]
-    print("Lasso coefficients (feature, coef):")
-    for name, coef in coef_info:
-        print(f"  {name}: {coef:.6g}")
+elif PREDICT_METHOD == 'hybrid':
+    # Hybrid: fit base theoretical model (cubic or N*logN) then learn residuals with a small RandomForest
+    from scipy.optimize import curve_fit
+    # Use the existing train/test split defined earlier
+    # Prepare arrays
+    X_train_arr = X_train[features[0]].values if isinstance(X_train, pd.DataFrame) else X_train
+    X_test_arr = X_test[features[0]].values if isinstance(X_test, pd.DataFrame) else X_test
+    y_train_arr = y_train.values if hasattr(y_train, 'values') else y_train
+    y_test_arr = y_true.values if hasattr(y_true, 'values') else y_true
+
+    if predicted_app == 'KF' or predicted_app == 'Matrix_Multiply':
+        # cubic base
+        def cubic_func(N, a, b, c, d):
+            return a * N**3 + b * N**2 + c * N + d
+        params, _ = curve_fit(cubic_func, X_train_arr, y_train_arr)
+        base_train = cubic_func(X_train_arr, *params)
+        base_test = cubic_func(X_test_arr, *params)
+
+    elif predicted_app == 'FFT':
+        # N*logN base using linear regression on engineered feature
+        X_train_fe = pd.DataFrame({ 'input': X_train_arr })
+        X_test_fe = pd.DataFrame({ 'input': X_test_arr })
+        X_train_fe['n_log_n'] = X_train_fe['input'] * np.log2(X_train_fe['input'])
+        X_test_fe['n_log_n'] = X_test_fe['input'] * np.log2(X_test_fe['input'])
+        from sklearn.linear_model import LinearRegression
+        base_lr = LinearRegression().fit(X_train_fe[['n_log_n']], y_train_arr)
+        base_train = base_lr.predict(X_train_fe[['n_log_n']])
+        base_test = base_lr.predict(X_test_fe[['n_log_n']])
+    else:
+        raise ValueError(f"未知的预测程序: {PREDICT_METHOD}")
+
+    # residuals on training set
+    residuals_train = y_train_arr - base_train
+
+    # small RF to model residuals
+    res_model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=2)
+    res_model.fit(X_train_arr.reshape(-1,1), residuals_train)
+
+    res_pred_test = res_model.predict(X_test_arr.reshape(-1,1))
+    y_pred = base_test + res_pred_test
+
 else:
     raise ValueError(f"未知的预测方式: {PREDICT_METHOD}")
 

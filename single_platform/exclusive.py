@@ -103,7 +103,7 @@ plt.grid(True)
 plt.legend()
 plt.show()
 
-"""
+
 # 拟合Matrix Multiplication的时间复杂度模型
 import pandas as pd
 import numpy as np
@@ -121,7 +121,7 @@ predicted_app = 'Matrix_Multiply'
 host_data = data[(data['cpu'] == host_cpu) & (data['program'] == predicted_app)]
 
 # 3. 训练数据集划分
-train_data, test_data = train_test_split(host_data, test_size=0.1, random_state=2)
+train_data, test_data = train_test_split(host_data, test_size=0.1, random_state=6)
 X_train = train_data['input'].values
 y_train = train_data['time'].values
 X_test = test_data['input'].values
@@ -151,7 +151,7 @@ print(f"拟合公式: T(N) = {a_fit} * N^3 + {b_fit} * N^2 + {c_fit} * N + {d_fi
 print(f"MAPE: {mape:.4f}")
 print(f"R²: {r2:.4f}")
 print(f"RMSE: {rmse:.4f}")
-
+"""
 # 8. 可视化拟合结果
 N_range = np.linspace(min(X_train), max(X_train), 1000)
 T_pred = matrix_multiplication_complexity(N_range, a_fit, b_fit, c_fit, d_fit)
