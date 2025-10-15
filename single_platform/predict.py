@@ -11,14 +11,15 @@ from scipy.optimize import curve_fit
 from xgboost import XGBRegressor
 
 # ========== 配置区 ==========
-# Matrix_Multiply | KF | FFT
-predicted_app = 'FFT'
-host_cpu = 'Cortex-R5F'
+# Matrix_Multiply | KF | FFT | AES | MD5 | SHA256 | MPC
+predicted_app = 'MPC'
+# R5 | A72 | M7
+host_cpu = 'A72'
 # rf | svr | mlp | curve_fit | xgboost | hybrid
 PREDICT_METHOD = 'curve_fit'
 SEEDS = [1, 2, 6, 42, 123, 2025, 33550336]
 TEST_SIZE = 0.3
-LOWER_BOUND = 0.100
+LOWER_BOUND = 0.0
 
 # ========== 数据准备 ==========
 data = pd.read_csv("exclusive_runtime.csv")
@@ -114,8 +115,6 @@ def run_one(seed: int):
         y_pred = model.predict(X_test_scaled)
 
     elif PREDICT_METHOD == 'mlp':
-        # Simple MLP regressor option
-        # Use engineered feature for FFT (n*log2(n)), otherwise use input
         if predicted_app == 'FFT':
             X_train_fe = train_data[['input']].copy()
             X_test_fe = test_data[['input']].copy()
@@ -165,6 +164,26 @@ def run_one(seed: int):
             a_fit, b_fit = params
             print(f"拟合公式 (fft): T(N) = {a_fit} * N log2(N) + {b_fit:.6f}")
 
+        elif predicted_app in ('AES', 'MD5', 'SHA256'):
+            # Linear complexity: T(N) = a * N + b
+            def linear_func(N, a, b):
+                return a * N + b
+
+            params, _ = curve_fit(linear_func, X_train_cf, y_train_cf, maxfev=10000)
+            y_pred = linear_func(X_test_cf, *params)
+            a_fit, b_fit = params
+            print(f"拟合公式 (linear): T(N) = {a_fit} * N + {b_fit:.6f}")
+
+        elif predicted_app == 'MPC' and host_cpu == 'A72':
+            # Quadratic complexity hypothesis for MPC on A72: T(N) = a*N^2 + b*N + c
+            def quad_func(N, a, b, c):
+                return a * N**2 + b * N + c
+
+            params, _ = curve_fit(quad_func, X_train_cf, y_train_cf, maxfev=10000)
+            y_pred = quad_func(X_test_cf, *params)
+            a_fit, b_fit, c_fit = params
+            print(f"拟合公式 (quadratic): T(N) = {a_fit} * N^2 + {b_fit} * N + {c_fit:.6f}")
+
         else:
             def cubic_func(N, a, b, c, d):
                 return a * N**3 + b * N**2 + c * N + d
@@ -206,6 +225,25 @@ def run_one(seed: int):
             base_lr = LinearRegression().fit(X_train_fe[['n_log_n']], y_train_arr)
             base_train = base_lr.predict(X_train_fe[['n_log_n']])
             base_test = base_lr.predict(X_test_fe[['n_log_n']])
+        elif predicted_app in ('AES', 'MD5', 'SHA256') or (predicted_app == 'MPC' and host_cpu == 'M7'):
+            # Linear base model for cryptographic/hash functions
+            from sklearn.linear_model import LinearRegression
+            X_train_lin = X_train_arr.reshape(-1, 1)
+            X_test_lin = X_test_arr.reshape(-1, 1)
+            base_lr = LinearRegression().fit(X_train_lin, y_train_arr)
+            base_train = base_lr.predict(X_train_lin)
+            base_test = base_lr.predict(X_test_lin)
+        elif predicted_app == 'MPC' and host_cpu == 'A72':
+            # Quadratic base model hypothesis for MPC on A72: T(N) = a*N^2 + b*N + c
+            def quad_base(N, a, b, c):
+                return a * N**2 + b * N + c
+
+            # Fit via numpy polyfit for stability on 2nd-degree polynomial
+            coefs = np.polyfit(X_train_arr, y_train_arr, 2)
+            # np.polyfit returns [a, b, c]
+            a, b, c = coefs
+            base_train = quad_base(X_train_arr, a, b, c)
+            base_test = quad_base(X_test_arr, a, b, c)
         else:
             raise ValueError(f"未知的程序类型：{predicted_app}")
 
@@ -308,7 +346,7 @@ if __name__ == '__main__':
             plt.show()
 '''
 
-"""
+'''
 # 显示输入规模 vs 运行时间的散点图
 plt.figure(figsize=(8, 6))
 plt.scatter(host_data['input'], host_data['time'], color='blue', alpha=0.7, label='Measured Data')
@@ -318,4 +356,4 @@ plt.ylabel("Execution Time (s)", fontsize=14)
 plt.grid(True)
 plt.legend()
 plt.show()
-"""
+'''
