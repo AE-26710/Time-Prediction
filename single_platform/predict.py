@@ -14,12 +14,12 @@ from xgboost import XGBRegressor
 # Matrix_Multiply | KF | FFT | AES | MD5 | SHA256 | MPC
 predicted_app = 'MPC'
 # R5 | A72 | M7
-host_cpu = 'A72'
+host_cpu = 'M7'
 # rf | svr | mlp | curve_fit | xgboost | hybrid
-PREDICT_METHOD = 'curve_fit'
+PREDICT_METHOD = 'hybrid'
 SEEDS = [1, 2, 6, 42, 123, 2025, 33550336]
 TEST_SIZE = 0.3
-LOWER_BOUND = 0.0
+LOWER_BOUND = .025
 
 # ========== 数据准备 ==========
 data = pd.read_csv("exclusive_runtime.csv")
@@ -245,7 +245,7 @@ def run_one(seed: int):
             base_train = quad_base(X_train_arr, a, b, c)
             base_test = quad_base(X_test_arr, a, b, c)
         else:
-            raise ValueError(f"未知的程序类型：{predicted_app}")
+            raise ValueError(f"不支持的程序类型：{predicted_app}")
 
         residuals_train = y_train_arr - base_train
         res_model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=seed, n_jobs=-1)
@@ -254,7 +254,7 @@ def run_one(seed: int):
         y_pred = base_test + res_pred_test
 
     else:
-        raise ValueError(f"未知的预测方式: {PREDICT_METHOD}")
+        raise ValueError(f"不支持的预测方式: {PREDICT_METHOD}")
 
     mape = mean_absolute_percentage_error(y_true, y_pred)
     r2 = r2_score(y_true, y_pred)
@@ -346,7 +346,7 @@ if __name__ == '__main__':
             plt.show()
 '''
 
-'''
+
 # 显示输入规模 vs 运行时间的散点图
 plt.figure(figsize=(8, 6))
 plt.scatter(host_data['input'], host_data['time'], color='blue', alpha=0.7, label='Measured Data')
@@ -356,4 +356,3 @@ plt.ylabel("Execution Time (s)", fontsize=14)
 plt.grid(True)
 plt.legend()
 plt.show()
-'''
