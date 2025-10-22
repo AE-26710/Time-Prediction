@@ -12,19 +12,24 @@ from xgboost import XGBRegressor
 
 # ========== 配置区 ==========
 # Matrix_Multiply | KF | FFT | AES | MD5 | SHA256 | MPC
-predicted_app = 'MPC'
+predicted_app = 'FFT'
 # R5 | A72 | M7
-host_cpu = 'M7'
+host_cpu = 'A72'
 # rf | svr | mlp | curve_fit | xgboost | hybrid
-PREDICT_METHOD = 'hybrid'
+PREDICT_METHOD = 'curve_fit'
 SEEDS = [1, 2, 6, 42, 123, 2025, 33550336]
 TEST_SIZE = 0.3
-LOWER_BOUND = .025
+LOWER_BOUND = 0.0000
 
 # ========== 数据准备 ==========
-data = pd.read_csv("exclusive_runtime.csv")
+if predicted_app not in ('AES', 'MD5','SHA256'):
+    data = pd.read_csv("exclusive_runtime.csv")
+else:
+    data = pd.read_csv("exclusive_runtime_encrypt.csv")
 host_data = data[(data['cpu'] == host_cpu) & (data['program'] == predicted_app)]
 host_data = host_data[(host_data['time'] > LOWER_BOUND)]
+
+# host_data = host_data.sample(frac=0.01, random_state=42)
 
 features = ['input']
 output = 'time'
