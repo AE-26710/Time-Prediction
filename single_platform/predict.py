@@ -12,11 +12,11 @@ from xgboost import XGBRegressor
 
 # ========== 配置区 ==========
 # Matrix_Multiply | KF | FFT | AES | MD5 | SHA256 | MPC
-predicted_app = 'FFT'
+predicted_app = 'MPC'
 # R5 | A72 | M7
 host_cpu = 'A72'
-# rf | svr | mlp | curve_fit | xgboost | hybrid
-PREDICT_METHOD = 'curve_fit'
+# rf | svr | mlp | curve | xgboost | hybrid
+PREDICT_METHOD = 'hybrid'
 SEEDS = [1, 2, 6, 42, 123, 2025, 33550336]
 TEST_SIZE = 0.3
 LOWER_BOUND = 0.0000
@@ -29,7 +29,7 @@ else:
 host_data = data[(data['cpu'] == host_cpu) & (data['program'] == predicted_app)]
 host_data = host_data[(host_data['time'] > LOWER_BOUND)]
 
-# host_data = host_data.sample(frac=0.01, random_state=42)
+#host_data = host_data.sample(frac=0.01, random_state=42)
 
 features = ['input']
 output = 'time'
@@ -146,7 +146,7 @@ def run_one(seed: int):
             mlp.fit(X_train_scaled, y_train)
             y_pred = mlp.predict(X_test_scaled)
 
-    elif PREDICT_METHOD == 'curve_fit':
+    elif PREDICT_METHOD == 'curve':
         X_train_cf = X_train[features[0]].values if isinstance(X_train, pd.DataFrame) else X_train
         y_train_cf = y_train.values if hasattr(y_train, 'values') else y_train
         X_test_cf = X_test[features[0]].values if isinstance(X_test, pd.DataFrame) else X_test

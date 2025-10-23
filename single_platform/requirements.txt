@@ -1,0 +1,8 @@
+# Requirements for single_platform scripts (exclusive.py, predict.py)
+# Install with: pip install -r single_platform/requirements.txt
+pandas
+numpy
+matplotlib
+scipy
+scikit-learn
+xgboost
