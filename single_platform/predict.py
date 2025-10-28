@@ -11,12 +11,12 @@ from scipy.optimize import curve_fit
 from xgboost import XGBRegressor
 
 # ========== 配置区 ==========
-# Matrix_Multiply | KF | FFT | AES | MD5 | SHA256 | MPC
-predicted_app = 'MPC'
+# KF | FFT | AES | MD5 | SHA256 | MPC
+predicted_app = 'FFT'
 # R5 | A72 | M7
 host_cpu = 'A72'
 # rf | svr | mlp | curve | xgboost | hybrid
-PREDICT_METHOD = 'hybrid'
+PREDICT_METHOD = 'hybrid'.lower()
 SEEDS = [1, 2, 6, 42, 123, 2025, 33550336]
 TEST_SIZE = 0.3
 LOWER_BOUND = 0.0000
@@ -151,7 +151,7 @@ def run_one(seed: int):
         y_train_cf = y_train.values if hasattr(y_train, 'values') else y_train
         X_test_cf = X_test[features[0]].values if isinstance(X_test, pd.DataFrame) else X_test
 
-        if predicted_app in ('KF', 'Matrix_Multiply'):
+        if predicted_app in ('KF'):
             def cubic_func(N, a, b, c, d):
                 return a * N**3 + b * N**2 + c * N + d
 
@@ -213,7 +213,7 @@ def run_one(seed: int):
         X_test_arr = X_test[features[0]].values if isinstance(X_test, pd.DataFrame) else X_test
         y_train_arr = y_train.values if hasattr(y_train, 'values') else y_train
 
-        if predicted_app in ('KF', 'Matrix_Multiply'):
+        if predicted_app in ('KF'):
             def cubic_func(N, a, b, c, d):
                 return a * N**3 + b * N**2 + c * N + d
 

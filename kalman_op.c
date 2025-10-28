@@ -51,8 +51,8 @@ void kalman_filter_core_loop(size_t dim, int steps_as_iterations) {
     // x: 初始状态估计 (通常是0或基于先验知识)
     for (size_t i = 0; i < dim; i++) {
         P[i * dim + i] = 1.0;  // P = I
-        Q[i * dim + i] = 0.01; // 较小的过程噪声
-        R[i * dim + i] = 0.1;  // 较大的测量噪声
+        Q[i * dim + i] = 0.5; // 较小的过程噪声
+        R[i * dim + i] = 0.5;  // 较大的测量噪声
         x[i] = 0.0;            // 初始状态为0
     }
     mat_identity(I_mat, dim);
