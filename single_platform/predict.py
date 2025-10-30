@@ -16,13 +16,18 @@ predicted_app = 'FFT'
 # R5 | A72 | M7
 host_cpu = 'A72'
 # rf | svr | mlp | curve | xgboost | hybrid
-PREDICT_METHOD = 'hybrid'.lower()
+PREDICT_METHOD = 'xgboost'.lower()
+# 每个拟合方法将在这些随机种子下运行
 SEEDS = [1, 2, 6, 42, 123, 2025, 33550336]
+# 测试集占总数据比重
 TEST_SIZE = 0.3
-LOWER_BOUND = 0.0000
+# 忽略低于该阈值的运行时间数据（ms）
+LOWER_BOUND = 0
+# 打印详细信息（每个随机种子的结果、图形化评估）
+PRINT_DETAILS = False
 
 # ========== 数据准备 ==========
-if predicted_app not in ('AES', 'MD5','SHA256'):
+if predicted_app not in ('AES','MD5','SHA256'):
     data = pd.read_csv("exclusive_runtime.csv")
 else:
     data = pd.read_csv("exclusive_runtime_encrypt.csv")
@@ -43,7 +48,6 @@ def mape_grade(mape_value: float) -> str:
         return "中等"
     return "差"
 
-
 def rmse_pct_grade(pct_value: float) -> str:
     if pct_value < 10:
         return "优秀"
@@ -51,7 +55,8 @@ def rmse_pct_grade(pct_value: float) -> str:
         return "中等"
     return "差"
 
-def run_one(seed: int):
+# ========= 运行单次预测 ==========
+def run_one(seed: int, predict_method: str = PREDICT_METHOD):
     train_data, test_data = train_test_split(host_data, test_size=TEST_SIZE, random_state=seed)
     if train_data.empty or test_data.empty:
         raise ValueError("数据划分失败：训练集或测试集为空。")
@@ -65,7 +70,8 @@ def run_one(seed: int):
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    if PREDICT_METHOD == 'rf':
+    #随机森林回归RF,对非线性、异常值鲁棒，外推弱
+    if predict_method == 'rf':
         """
         n_estimators：森林中树的数量，默认100。增大可提升效果但计算更慢。
         max_depth：每棵树的最大深度，默认None（直到叶节点纯或样本数小于min_samples_split）。可防止过拟合。
@@ -99,7 +105,8 @@ def run_one(seed: int):
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
 
-    elif PREDICT_METHOD == 'svr':
+    #支持向量回归SVR,对单变量平滑非线性拟合好；对尺度敏感需标准化；外推弱
+    elif predict_method == 'svr':
         """
         kernel：核函数类型。常用有 'rbf'（高斯径向基，默认）、'linear'（线性）、'poly'（多项式）、'sigmoid'。
         C：惩罚系数，默认1.0。C越大，对误差的惩罚越强，模型更容易过拟合；C越小，容忍误差，模型更平滑。
@@ -119,7 +126,8 @@ def run_one(seed: int):
         model.fit(X_train_scaled, y_train)
         y_pred = model.predict(X_test_scaled)
 
-    elif PREDICT_METHOD == 'mlp':
+    #多层感知机回归MLP,表达力强，可拟合复杂曲线；需要较多数据与正则/早停来防过拟合；对尺度敏感；外推一般
+    elif predict_method == 'mlp':
         if predicted_app == 'FFT':
             X_train_fe = train_data[['input']].copy()
             X_test_fe = test_data[['input']].copy()
@@ -146,7 +154,8 @@ def run_one(seed: int):
             mlp.fit(X_train_scaled, y_train)
             y_pred = mlp.predict(X_test_scaled)
 
-    elif PREDICT_METHOD == 'curve':
+    # 曲线拟合curve，对已知复杂度的程序效果好，外推能力强
+    elif predict_method == 'curve':
         X_train_cf = X_train[features[0]].values if isinstance(X_train, pd.DataFrame) else X_train
         y_train_cf = y_train.values if hasattr(y_train, 'values') else y_train
         X_test_cf = X_test[features[0]].values if isinstance(X_test, pd.DataFrame) else X_test
@@ -196,7 +205,8 @@ def run_one(seed: int):
             params, _ = curve_fit(cubic_func, X_train_cf, y_train_cf, maxfev=10000)
             y_pred = cubic_func(X_test_cf, *params)
 
-    elif PREDICT_METHOD == 'xgboost':
+    # 极端梯度提升XGBoost,表达力强，处理大数据和高维特征好；对异常值敏感；外推能力一般
+    elif predict_method == 'xgboost':
         model = XGBRegressor(
             n_estimators=500,
             max_depth=15,
@@ -208,7 +218,8 @@ def run_one(seed: int):
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
 
-    elif PREDICT_METHOD == 'hybrid':
+    # 解析先验 + 残差学习HYBRID，兼顾可解释性与灵活性，比单一模型更稳健
+    elif predict_method == 'hybrid':
         X_train_arr = X_train[features[0]].values if isinstance(X_train, pd.DataFrame) else X_train
         X_test_arr = X_test[features[0]].values if isinstance(X_test, pd.DataFrame) else X_test
         y_train_arr = y_train.values if hasattr(y_train, 'values') else y_train
@@ -259,13 +270,12 @@ def run_one(seed: int):
         y_pred = base_test + res_pred_test
 
     else:
-        raise ValueError(f"不支持的预测方式: {PREDICT_METHOD}")
+        raise ValueError(f"不支持的预测方式: {predict_method}")
 
     mape = mean_absolute_percentage_error(y_true, y_pred)
     r2 = r2_score(y_true, y_pred)
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
 
-    # Normalized / percent RMSE variants
     eps = 1e-12
     mean_y = np.mean(y_true)
     range_y = np.max(y_true) - np.min(y_true)
@@ -302,11 +312,12 @@ if __name__ == '__main__':
             grade = mape_grade(metrics['mape'])
             rmse_mean_grade = rmse_pct_grade(metrics['rmse_pct_mean'])
             rmse_range_grade = rmse_pct_grade(metrics['rmse_pct_range'])
-            print(
-                f"Seed {seed}: MAPE={metrics['mape']:.4f} ({grade}), R2={metrics['r2']:.4f}, "
-                f"RMSE={metrics['rmse']:.4f} (s), RMSE%_mean={metrics['rmse_pct_mean']:.2f}% ({rmse_mean_grade}), "
-                f"RMSE%_range={metrics['rmse_pct_range']:.2f}% ({rmse_range_grade}), N={metrics['n_test']}"
-            )
+            if PRINT_DETAILS:
+                print(
+                    f"Seed {seed}: MAPE={metrics['mape']:.4f} ({grade}), R2={metrics['r2']:.4f}, "
+                    f"RMSE={metrics['rmse']:.4f} (ms), RMSE%_mean={metrics['rmse_pct_mean']:.2f}% ({rmse_mean_grade}), "
+                    f"RMSE%_range={metrics['rmse_pct_range']:.2f}% ({rmse_range_grade}), N={metrics['n_test']}"
+                )
         except Exception as exc:
             print(f"Seed {seed} failed: {exc}")
 
@@ -326,38 +337,49 @@ if __name__ == '__main__':
             
             'total_tests': df['n_test'].sum()
         }
-
-        print(f"\nMAPE: {agg['mape_mean']:.4f} ± {agg['mape_std']:.4f} ({mape_grade(agg['mape_mean'])})")
+        # 输出汇总结果与总体评估
+        print(f"\nTotal tests: {agg['total_tests']}")
+        print(f"MAPE: {agg['mape_mean']:.4f} ± {agg['mape_std']:.4f} ({mape_grade(agg['mape_mean'])})")
         print(f"R2:   {agg['r2_mean']:.4f} ± {agg['r2_std']:.4f}")
-        print(f"RMSE: {agg['rmse_mean']:.4f} ± {agg['rmse_std']:.4f} (s)")
-        rmse_mean_grade_agg = rmse_pct_grade(agg['rmse_pct_mean_mean'])
-        rmse_range_grade_agg = rmse_pct_grade(agg['rmse_pct_range_mean'])
-        print(f"RMSE%_mean: {agg['rmse_pct_mean_mean']:.2f}% ± {agg['rmse_pct_mean_std']:.2f}% ({rmse_mean_grade_agg})")
-        print(f"RMSE%_range: {agg['rmse_pct_range_mean']:.2f}% ± {agg['rmse_pct_range_std']:.2f}% ({rmse_range_grade_agg})")
-        print(f"Total test samples across seeds: {agg['total_tests']}")
+        print(f"RMSE: {agg['rmse_mean']:.4f} ± {agg['rmse_std']:.4f} (ms)")
 
-'''
-        if last_true is not None and last_pred is not None and len(last_true) and len(last_pred):
+        metrics_pct = [
+            ("RMSE%_mean", agg['rmse_pct_mean_mean'], agg['rmse_pct_mean_std'], rmse_pct_grade),
+            ("RMSE%_range", agg['rmse_pct_range_mean'], agg['rmse_pct_range_std'], rmse_pct_grade),
+        ]
+        for name, mean_val, std_val, grade_fn in metrics_pct:
+            print(f"{name}: {mean_val:.2f}% ± {std_val:.2f}% ({grade_fn(mean_val)})")
+
+        # 计算总体评估（取最差等级）
+        grades = {
+            'MAPE': mape_grade(agg['mape_mean']),
+            'RMSE%_mean': rmse_pct_grade(agg['rmse_pct_mean_mean']),
+            'RMSE%_range': rmse_pct_grade(agg['rmse_pct_range_mean'])
+        }
+        grade_order = {'优秀': 0, '中等': 1, '差': 2}
+        worst_metric, worst_grade = max(grades.items(), key=lambda kv: grade_order.get(kv[1], 2))
+        print(f"\nOverall assessment (worst of MAPE / RMSE%_mean / RMSE%_range): {worst_grade}")
+        # 绘制最后一次运行的预测结果散点图
+        if last_true is not None and last_pred is not None and len(last_true) and len(last_pred) and (PRINT_DETAILS == True):
             plt.figure(figsize=(8, 6))
             plt.scatter(last_true, last_pred, color='blue', alpha=0.7, label='Predicted vs True')
             min_val = min(last_true.min(), last_pred.min())
             max_val = max(last_true.max(), last_pred.max())
             plt.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', label='Perfect Prediction')
             plt.title(f"Predicted vs True runtime for {predicted_app}", fontsize=16)
-            plt.xlabel("True runtime(s)", fontsize=14)
-            plt.ylabel("Predicted runtime(s)", fontsize=14)
+            plt.xlabel("True runtime(ms)", fontsize=14)
+            plt.ylabel("Predicted runtime(ms)", fontsize=14)
             plt.legend()
             plt.grid(True)
             plt.show()
-'''
-
 
 # 显示输入规模 vs 运行时间的散点图
-plt.figure(figsize=(8, 6))
-plt.scatter(host_data['input'], host_data['time'], color='blue', alpha=0.7, label='Measured Data')
-plt.title(f"Input vs Time for {predicted_app} on {host_cpu}", fontsize=16)
-plt.xlabel("Input Size", fontsize=14)
-plt.ylabel("Execution Time (s)", fontsize=14)
-plt.grid(True)
-plt.legend()
-plt.show()
+if PRINT_DETAILS:
+    plt.figure(figsize=(8, 6))
+    plt.scatter(host_data['input'], host_data['time'], color='blue', alpha=0.7, label='Measured Data')
+    plt.title(f"Input vs Time for {predicted_app} on {host_cpu}", fontsize=16)
+    plt.xlabel("Input Size", fontsize=14)
+    plt.ylabel("Execution Time (ms)", fontsize=14)
+    plt.grid(True)
+    plt.legend()
+    plt.show()
