@@ -26,15 +26,17 @@
 
 - `R5.pptx` — 组会使用的报告演示文稿
 - `table.xlsx` — 进度数据表
+- `kalman_op.c` — 赵思齐初始提供的卡尔曼滤波示例程序。
+- `kalman_op_A72.c` — 经过修改，用于在A72平台上测试的代码。
+- `kalman_op_M7.c` — 经过修改，用于在M7平台上测试的代码。
 - `freertos_exclusive_runtime/` — 赵思齐初始提供的R5核示例程序。
 - `single_platform/` — 单平台收集的运行时数据与预测脚本。
    该目录是主要工作目录。存放数据和预测的 Python 脚本。
   - `exclusive.py` — 赵思齐初始提供的数据处理脚本。留档备用。
   - `exclusive_runtime_o.csv` — 赵思齐初始提供的R5核时间数据。留档备用。
-  - `fft-R5.csv`, `matrix-R5.csv`, `mpc-A72.csv` — 针对不同程序在特定平台上收集的原始数据。留档备用。
   - `predict.py` — 用于对单平台数据进行时间预测的脚本。
-  - `exclusive_runtime.csv`, `exclusive_runtime_encrypt.csv` — 拟合时实际读取的独占运行时记录。
+  - `exclusive_runtime.csv`, `exclusive_runtime_encrypt.csv` — 整合了所有数据的表格，拟合时实际读取。
     - `input`：输入规模
-    - `time`：运行时间(秒)
+    - `time`：运行时间(毫秒/ms)
     - `cpu`：平台名称
     - `program`：运行的程序
