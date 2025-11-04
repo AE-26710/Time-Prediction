@@ -12,11 +12,11 @@ from xgboost import XGBRegressor
 
 # ========== 配置区 ==========
 # KF | FFT | AES | MD5 | SHA256 | MPC
-predicted_app = 'FFT'
+predicted_app = 'MPC'
 # R5 | A72 | M7
-host_cpu = 'A72'
+host_cpu = 'R5'
 # rf | svr | mlp | curve | xgboost | hybrid
-PREDICT_METHOD = 'xgboost'.lower()
+PREDICT_METHOD = 'curve'.lower()
 # 每个拟合方法将在这些随机种子下运行
 SEEDS = [1, 2, 6, 42, 123, 2025, 33550336]
 # 测试集占总数据比重
@@ -249,7 +249,7 @@ def run_one(seed: int, predict_method: str = PREDICT_METHOD):
             base_lr = LinearRegression().fit(X_train_lin, y_train_arr)
             base_train = base_lr.predict(X_train_lin)
             base_test = base_lr.predict(X_test_lin)
-        elif predicted_app == 'MPC' and host_cpu == 'A72':
+        elif predicted_app == 'MPC' and host_cpu in ('A72', 'R5'):
             # Quadratic base model hypothesis for MPC on A72: T(N) = a*N^2 + b*N + c
             def quad_base(N, a, b, c):
                 return a * N**2 + b * N + c
