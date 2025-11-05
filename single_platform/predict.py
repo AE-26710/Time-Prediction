@@ -12,17 +12,17 @@ from xgboost import XGBRegressor
 
 # ========== 配置区 ==========
 # KF | FFT | AES | MD5 | SHA256 | MPC
-predicted_app = 'MPC'
+predicted_app = 'KF'
 # R5 | A72 | M7
 host_cpu = 'R5'
 # rf | svr | mlp | curve | xgboost | hybrid
-PREDICT_METHOD = 'rf'.lower()
+PREDICT_METHOD = 'mlp'.lower()
 # 每个拟合方法将在这些随机种子下运行
 SEEDS = [1, 2, 6, 42, 123, 2025, 33550336]
 # 测试集占总数据比重
 TEST_SIZE = 0.3
 # 忽略低于该阈值的运行时间数据（ms）
-LOWER_BOUND = 0
+LOWER_BOUND = 100
 # 打印详细信息（每个随机种子的结果、图形化评估）
 PRINT_DETAILS = True
 
@@ -160,7 +160,7 @@ def run_one(seed: int, predict_method: str = PREDICT_METHOD):
         y_train_cf = y_train.values if hasattr(y_train, 'values') else y_train
         X_test_cf = X_test[features[0]].values if isinstance(X_test, pd.DataFrame) else X_test
 
-        if predicted_app in ('KF'):
+        if predicted_app == 'KF':
             def cubic_func(N, a, b, c, d):
                 return a * N**3 + b * N**2 + c * N + d
 
