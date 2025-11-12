@@ -12,17 +12,17 @@ from xgboost import XGBRegressor
 
 # ========== 配置区 ==========
 # KF | FFT | AES | MD5 | SHA256 | MPC
-predicted_app = 'KF'
+predicted_app = 'FFT'.upper()
 # R5 | A72 | M7
-host_cpu = 'R5'
+host_cpu = 'A72'.upper()
 # rf | svr | mlp | curve | xgboost | hybrid
-PREDICT_METHOD = 'mlp'.lower()
+PREDICT_METHOD = 'xgboost'.lower()
 # 每个拟合方法将在这些随机种子下运行
 SEEDS = [1, 2, 6, 42, 123, 2025, 33550336]
 # 测试集占总数据比重
 TEST_SIZE = 0.3
 # 忽略低于该阈值的运行时间数据（ms）
-LOWER_BOUND = 100
+LOWER_BOUND = 0
 # 打印详细信息（每个随机种子的结果、图形化评估）
 PRINT_DETAILS = True
 
@@ -362,10 +362,15 @@ if __name__ == '__main__':
         # 绘制最后一次运行的预测结果散点图
         if last_true is not None and last_pred is not None and len(last_true) and len(last_pred) and (PRINT_DETAILS == True):
             plt.figure(figsize=(8, 6))
-            plt.scatter(last_true, last_pred, color='blue', alpha=0.7, label='Predicted vs True')
+            # Predicted vs True scatter styling
+            plt.scatter(last_true, last_pred, color="#1500ff", alpha=0.8, s=20, edgecolor='k', linewidth=0.3, label='Predicted vs True')
+            # FFT 使用对数轴以更好地展示比例关系
+            if predicted_app == 'FFT':
+                plt.xscale('log')
+                plt.yscale('log')
             min_val = min(last_true.min(), last_pred.min())
             max_val = max(last_true.max(), last_pred.max())
-            plt.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', label='Perfect Prediction')
+            plt.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', linewidth=1, label='Perfect Prediction')
             plt.title(f"Predicted vs True runtime for {predicted_app}", fontsize=16)
             plt.xlabel("True runtime(ms)", fontsize=14)
             plt.ylabel("Predicted runtime(ms)", fontsize=14)
@@ -376,10 +381,23 @@ if __name__ == '__main__':
 # 显示输入规模 vs 运行时间的散点图
 if PRINT_DETAILS:
     plt.figure(figsize=(8, 6))
-    plt.scatter(host_data['input'], host_data['time'], color='blue', alpha=0.7, label='Measured Data')
+    plt.scatter(host_data['input'], host_data['time'], color="#1500FF", alpha=1, s=1, label='Measured Data')
+    # 对于 FFT，输入规模通常为 2 的幂次，使用 log2 横轴更直观；否则使用线性横轴
+    if predicted_app == 'FFT':
+        plt.xscale('log', base=2)
+        plt.yscale('log')
+        inputs = host_data['input'].values
+        # 仅保留正值，避免 log2 出错
+        inputs_pos = inputs[inputs > 0]
+        if inputs_pos.size > 0:
+            powers = np.unique(np.floor(np.log2(inputs_pos)).astype(int))
+            xticks = (2 ** powers).astype(int)
+            # show numeric tick labels (no special annotation)
+            plt.xticks(xticks)
+    # generic labels (no extra '(log)' annotations)
     plt.title(f"Input vs Time for {predicted_app} on {host_cpu}", fontsize=16)
     plt.xlabel("Input Size", fontsize=14)
     plt.ylabel("Execution Time (ms)", fontsize=14)
-    plt.grid(True)
+    plt.grid(True, which='both', ls='--', alpha=0.4)
     plt.legend()
     plt.show()

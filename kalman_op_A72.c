@@ -188,7 +188,7 @@ int main() {
             seconds -= 1;
             nanoseconds += 1000;
         }
-        double elapsed = seconds + nanoseconds;
+        double elapsed = seconds*1000 + nanoseconds;
         printf("%d,%f,A72,KF\n", i, elapsed);
     }
     return 0;
