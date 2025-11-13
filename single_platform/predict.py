@@ -12,7 +12,7 @@ from xgboost import XGBRegressor
 
 # ========== 配置区 ==========
 # KF | FFT | AES | MD5 | SHA256 | MPC
-predicted_app = 'FFT'.upper()
+predicted_app = 'mpc'.upper()
 # R5 | A72 | M7
 host_cpu = 'A72'.upper()
 # rf | svr | mlp | curve | xgboost | hybrid
@@ -302,6 +302,7 @@ if __name__ == '__main__':
     all_metrics = []
     last_true = None
     last_pred = None
+    all_results = []  # 存储所有运行结果
 
     for seed in SEEDS:
         try:
@@ -309,6 +310,7 @@ if __name__ == '__main__':
             all_metrics.append(metrics)
             last_true = np.array(y_true_seed)
             last_pred = np.array(y_pred_seed)
+            all_results.append((np.array(y_true_seed), np.array(y_pred_seed), seed))  # 保存所有结果
             grade = mape_grade(metrics['mape'])
             rmse_mean_grade = rmse_pct_grade(metrics['rmse_pct_mean'])
             rmse_range_grade = rmse_pct_grade(metrics['rmse_pct_range'])
@@ -359,23 +361,40 @@ if __name__ == '__main__':
         grade_order = {'优秀': 0, '中等': 1, '差': 2}
         worst_metric, worst_grade = max(grades.items(), key=lambda kv: grade_order.get(kv[1], 2))
         print(f"\nOverall assessment (worst of MAPE / RMSE%_mean / RMSE%_range): {worst_grade}")
-        # 绘制最后一次运行的预测结果散点图
-        if last_true is not None and last_pred is not None and len(last_true) and len(last_pred) and (PRINT_DETAILS == True):
-            plt.figure(figsize=(8, 6))
-            # Predicted vs True scatter styling
-            plt.scatter(last_true, last_pred, color="#1500ff", alpha=0.8, s=20, edgecolor='k', linewidth=0.3, label='Predicted vs True')
+        
+        # 绘制所有运行的预测结果散点图
+        if all_results and PRINT_DETAILS:
+            plt.figure(figsize=(10, 8))
+            
+            # 定义不同的颜色用于区分不同的随机种子
+            colors = plt.cm.tab10(np.linspace(0, 1, len(all_results)))
+            
+            # 计算全局最小最大值用于绘制对角线
+            all_true_vals = np.concatenate([result[0] for result in all_results])
+            all_pred_vals = np.concatenate([result[1] for result in all_results])
+            min_val = min(all_true_vals.min(), all_pred_vals.min())
+            max_val = max(all_true_vals.max(), all_pred_vals.max())
+            
+            # 绘制每个随机种子的结果
+            for idx, (y_true_i, y_pred_i, seed_i) in enumerate(all_results):
+                plt.scatter(y_true_i, y_pred_i, color=colors[idx], alpha=1, s=15, 
+                           edgecolor='k', linewidth=0.2, label=f'Seed {seed_i}')
+            
             # FFT 使用对数轴以更好地展示比例关系
             if predicted_app == 'FFT':
                 plt.xscale('log')
                 plt.yscale('log')
-            min_val = min(last_true.min(), last_pred.min())
-            max_val = max(last_true.max(), last_pred.max())
-            plt.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', linewidth=1, label='Perfect Prediction')
-            plt.title(f"Predicted vs True runtime for {predicted_app}", fontsize=16)
-            plt.xlabel("True runtime(ms)", fontsize=14)
-            plt.ylabel("Predicted runtime(ms)", fontsize=14)
-            plt.legend()
-            plt.grid(True)
+            
+            # 绘制完美预测线
+            plt.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', 
+                    linewidth=2, label='Perfect Prediction', zorder=100)
+            
+            plt.title(f"Predicted vs True runtime for {predicted_app} on {host_cpu}", fontsize=16)
+            plt.xlabel("True runtime (ms)", fontsize=14)
+            plt.ylabel("Predicted runtime (ms)", fontsize=14)
+            plt.legend(fontsize=10, loc='best')
+            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
             plt.show()
 
 # 显示输入规模 vs 运行时间的散点图
