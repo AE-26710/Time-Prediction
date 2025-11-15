@@ -12,19 +12,19 @@ from xgboost import XGBRegressor
 
 # ========== 配置区 ==========
 # KF | FFT | AES | MD5 | SHA256 | MPC
-predicted_app = 'MD5'.upper()
+predicted_app = 'MPC'.upper()
 # R5 | A72 | M7
-host_cpu = 'R5'.upper()
+host_cpu = 'A72'.upper()
 # rf | svr | mlp | curve | xgboost | hybrid
-PREDICT_METHOD = 'HYBRID'.lower()
+PREDICT_METHOD = 'curve'.lower()
 # 每个拟合方法将在这些随机种子下运行
 SEEDS = [1, 2, 6, 42, 123, 2025, 33550336]
 # 测试集占总数据比重
 TEST_SIZE = 0.3
 # 忽略低于该阈值的运行时间数据（ms）
-LOWER_BOUND = 00
+LOWER_BOUND = 0
 # 打印详细信息（每个随机种子的结果、图形化评估）
-PRINT_DETAILS = False
+PRINT_DETAILS = True
 
 # ========== 数据准备 ==========
 if predicted_app not in ('AES','MD5','SHA256'):
