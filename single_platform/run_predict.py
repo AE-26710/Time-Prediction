@@ -12,18 +12,18 @@ from xgboost import XGBRegressor
 
 # ========== 配置区 ==========
 # KF | FFT | AES | MD5 | SHA256 | MPC
-predicted_app = 'MPC'.upper()
+predicted_app = 'KF'.upper()
 # R5 | A72 | M7
-host_cpu = 'A72'.upper()
+host_cpu = 'R5'.upper()
 # rf | svr | mlp | curve | xgboost | hybrid
-PREDICT_METHOD = 'curve'.lower()
+PREDICT_METHOD = 'svr'.lower()
 # 每个拟合方法将在这些随机种子下运行
 SEEDS = [1, 2, 6, 42, 123, 2025, 33550336]
 # 测试集占总数据比重
 TEST_SIZE = 0.3
 # 忽略低于该阈值的运行时间数据（ms）
-LOWER_BOUND = 0
-# 打印详细信息（每个随机种子的结果、图形化评估）
+LOWER_BOUND = 1
+# 打印详细信息（图形化评估）
 PRINT_DETAILS = True
 
 # ========== 数据准备 ==========
@@ -294,6 +294,84 @@ def run_one(seed: int, predict_method: str = PREDICT_METHOD):
     }
     return metrics, y_true, y_pred
 
+# ========= 绘图函数 ==========
+def plot_prediction_results(all_results, predicted_app, host_cpu):
+    """
+    绘制所有运行的预测结果散点图
+    
+    参数:
+        all_results: list of tuples (y_true, y_pred, seed)
+        predicted_app: 程序名称
+        host_cpu: 平台名称
+    """
+    if not all_results:
+        return
+    
+    plt.figure(figsize=(10, 8))
+    
+    # 定义不同的颜色用于区分不同的随机种子
+    colors = plt.cm.tab10(np.linspace(0, 1, len(all_results)))
+    
+    # 计算全局最小最大值用于绘制对角线
+    all_true_vals = np.concatenate([result[0] for result in all_results])
+    all_pred_vals = np.concatenate([result[1] for result in all_results])
+    min_val = min(all_true_vals.min(), all_pred_vals.min())
+    max_val = max(all_true_vals.max(), all_pred_vals.max())
+    
+    # 绘制每个随机种子的结果
+    for idx, (y_true_i, y_pred_i, seed_i) in enumerate(all_results):
+        plt.scatter(y_true_i, y_pred_i, color=colors[idx], alpha=1, s=15, 
+                   edgecolor='k', linewidth=0.2, label=f'Seed {seed_i}')
+    
+    # FFT 使用对数轴以更好地展示比例关系
+    if predicted_app == 'FFT':
+        plt.xscale('log')
+        plt.yscale('log')
+    
+    # 绘制完美预测线
+    plt.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', 
+            linewidth=2, label='Perfect Prediction', zorder=100)
+    
+    plt.title(f"Predicted vs True runtime for {predicted_app} on {host_cpu}", fontsize=16)
+    plt.xlabel("True runtime (ms)", fontsize=14)
+    plt.ylabel("Predicted runtime (ms)", fontsize=14)
+    plt.legend(fontsize=10, loc='best')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+def plot_input_vs_time(host_data, predicted_app, host_cpu):
+    """
+    显示输入规模 vs 运行时间的散点图
+    
+    参数:
+        host_data: DataFrame 包含 'input' 和 'time' 列
+        predicted_app: 程序名称
+        host_cpu: 平台名称
+    """
+    plt.figure(figsize=(8, 6))
+    plt.scatter(host_data['input'], host_data['time'], color="#1500FF", alpha=1, s=1, label='Measured Data')
+    
+    # 对于 FFT，输入规模通常为 2 的幂次，使用 log2 横轴更直观；否则使用线性横轴
+    if predicted_app == 'FFT':
+        plt.xscale('log', base=2)
+        plt.yscale('log')
+        inputs = host_data['input'].values
+        # 仅保留正值，避免 log2 出错
+        inputs_pos = inputs[inputs > 0]
+        if inputs_pos.size > 0:
+            powers = np.unique(np.floor(np.log2(inputs_pos)).astype(int))
+            xticks = (2 ** powers).astype(int)
+            # show numeric tick labels (no special annotation)
+            plt.xticks(xticks)
+    
+    # generic labels (no extra '(log)' annotations)
+    plt.title(f"Input vs Time for {predicted_app} on {host_cpu}", fontsize=16)
+    plt.xlabel("Input Size", fontsize=14)
+    plt.ylabel("Execution Time (ms)", fontsize=14)
+    plt.grid(True, which='both', ls='--', alpha=0.4)
+    plt.legend()
+    plt.show()
 
 if __name__ == '__main__':
     print(f"Predicting runtime for {predicted_app} on {host_cpu}")
@@ -314,12 +392,11 @@ if __name__ == '__main__':
             grade = mape_grade(metrics['mape'])
             rmse_mean_grade = rmse_pct_grade(metrics['rmse_pct_mean'])
             rmse_range_grade = rmse_pct_grade(metrics['rmse_pct_range'])
-            if PRINT_DETAILS:
-                print(
-                    f"Seed {seed}: MAPE={metrics['mape']:.4f} ({grade}), R2={metrics['r2']:.4f}, "
-                    f"RMSE={metrics['rmse']:.4f} (ms), RMSE%_mean={metrics['rmse_pct_mean']:.2f}% ({rmse_mean_grade}), "
-                    f"RMSE%_range={metrics['rmse_pct_range']:.2f}% ({rmse_range_grade}), N={metrics['n_test']}"
-                )
+            print(
+                f"Seed {seed}: MAPE={metrics['mape']:.4f} ({grade}), R2={metrics['r2']:.4f}, "
+                f"RMSE={metrics['rmse']:.4f} (ms), RMSE%_mean={metrics['rmse_pct_mean']:.2f}% ({rmse_mean_grade}), "
+                f"RMSE%_range={metrics['rmse_pct_range']:.2f}% ({rmse_range_grade}), N={metrics['n_test']}"
+            )
         except Exception as exc:
             print(f"Seed {seed} failed: {exc}")
 
@@ -361,62 +438,15 @@ if __name__ == '__main__':
         grade_order = {'优秀': 0, '中等': 1, '差': 2}
         worst_metric, worst_grade = max(grades.items(), key=lambda kv: grade_order.get(kv[1], 2))
         print(f"\nOverall assessment (worst of MAPE / RMSE%_mean / RMSE%_range): {worst_grade}")
+        # 打印 MAPE 范围（格式：min%~max%）
+        mape_min = df['mape'].min()
+        mape_max = df['mape'].max()
+        print(f"{mape_min * 100:.2f}%~{mape_max * 100:.2f}%")
         
         # 绘制所有运行的预测结果散点图
         if all_results and PRINT_DETAILS:
-            plt.figure(figsize=(10, 8))
-            
-            # 定义不同的颜色用于区分不同的随机种子
-            colors = plt.cm.tab10(np.linspace(0, 1, len(all_results)))
-            
-            # 计算全局最小最大值用于绘制对角线
-            all_true_vals = np.concatenate([result[0] for result in all_results])
-            all_pred_vals = np.concatenate([result[1] for result in all_results])
-            min_val = min(all_true_vals.min(), all_pred_vals.min())
-            max_val = max(all_true_vals.max(), all_pred_vals.max())
-            
-            # 绘制每个随机种子的结果
-            for idx, (y_true_i, y_pred_i, seed_i) in enumerate(all_results):
-                plt.scatter(y_true_i, y_pred_i, color=colors[idx], alpha=1, s=15, 
-                           edgecolor='k', linewidth=0.2, label=f'Seed {seed_i}')
-            
-            # FFT 使用对数轴以更好地展示比例关系
-            if predicted_app == 'FFT':
-                plt.xscale('log')
-                plt.yscale('log')
-            
-            # 绘制完美预测线
-            plt.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', 
-                    linewidth=2, label='Perfect Prediction', zorder=100)
-            
-            plt.title(f"Predicted vs True runtime for {predicted_app} on {host_cpu}", fontsize=16)
-            plt.xlabel("True runtime (ms)", fontsize=14)
-            plt.ylabel("Predicted runtime (ms)", fontsize=14)
-            plt.legend(fontsize=10, loc='best')
-            plt.grid(True, alpha=0.3)
-            plt.tight_layout()
-            plt.show()
+            plot_prediction_results(all_results, predicted_app, host_cpu)
 
-# 显示输入规模 vs 运行时间的散点图
-if PRINT_DETAILS:
-    plt.figure(figsize=(8, 6))
-    plt.scatter(host_data['input'], host_data['time'], color="#1500FF", alpha=1, s=1, label='Measured Data')
-    # 对于 FFT，输入规模通常为 2 的幂次，使用 log2 横轴更直观；否则使用线性横轴
-    if predicted_app == 'FFT':
-        plt.xscale('log', base=2)
-        plt.yscale('log')
-        inputs = host_data['input'].values
-        # 仅保留正值，避免 log2 出错
-        inputs_pos = inputs[inputs > 0]
-        if inputs_pos.size > 0:
-            powers = np.unique(np.floor(np.log2(inputs_pos)).astype(int))
-            xticks = (2 ** powers).astype(int)
-            # show numeric tick labels (no special annotation)
-            plt.xticks(xticks)
-    # generic labels (no extra '(log)' annotations)
-    plt.title(f"Input vs Time for {predicted_app} on {host_cpu}", fontsize=16)
-    plt.xlabel("Input Size", fontsize=14)
-    plt.ylabel("Execution Time (ms)", fontsize=14)
-    plt.grid(True, which='both', ls='--', alpha=0.4)
-    plt.legend()
-    plt.show()
+    # 显示输入规模 vs 运行时间的散点图
+    if PRINT_DETAILS:
+        plot_input_vs_time(host_data, predicted_app, host_cpu)
