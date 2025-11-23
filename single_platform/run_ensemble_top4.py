@@ -16,10 +16,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPRegressor
 from scipy.optimize import curve_fit
 from xgboost import XGBRegressor
+from pathlib import Path
 
 # ========== 配置区 ==========
 # KF | FFT | AES | MD5 | SHA256 | MPC
-predicted_app = 'KF'.upper()
+predicted_app = 'AES'.upper()
 # R5 | A72 | M7
 host_cpu = 'A72'.upper()
 # rf | svr | mlp | curve | xgboost | hybrid
@@ -28,12 +29,46 @@ PREDICT_METHOD = 'hybrid'.lower()
 SEEDS = [1, 2, 6, 42, 123, 2025, 33550336]
 # 测试集占总数据比重
 TEST_SIZE = 0.3
-# 忽略低于该阈值的运行时间数据（ms）
-LOWER_BOUND = 10
+# lower_bound 配置文件
+CONFIG_FILE = Path('config_lower_bounds.csv')
 # 打印详细信息
 PRINT_DETAILS = False
 # 导出ONNX后自动验证模型
 AUTO_VERIFY_ONNX = True
+
+# ========== 工具函数 ==========
+def load_lower_bound() -> float:
+    if not CONFIG_FILE.exists():
+        raise FileNotFoundError(f"未找到 lower_bound 配置文件: {CONFIG_FILE}")
+
+    config_df = pd.read_csv(CONFIG_FILE)
+    if config_df.empty:
+        raise ValueError(f"配置文件 {CONFIG_FILE} 为空")
+
+    config_df['algorithm'] = config_df['algorithm'].astype(str).str.upper()
+    config_df['platform'] = config_df['platform'].astype(str).str.upper()
+    config_df['method'] = config_df['method'].astype(str).str.lower()
+
+    mask = (
+        (config_df['algorithm'] == predicted_app)
+        & (config_df['platform'] == host_cpu)
+        & (config_df['method'] == PREDICT_METHOD)
+    )
+
+    subset = config_df[mask]
+    if subset.empty:
+        raise ValueError(
+            f"配置文件 {CONFIG_FILE} 中未找到 (algorithm={predicted_app}, platform={host_cpu}, method={PREDICT_METHOD}) 的 lower_bound" 
+        )
+
+    value = subset.iloc[0]['lower_bound']
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"lower_bound 无法转换为数字: {value}")
+
+
+LOWER_BOUND = load_lower_bound()
 
 # ========== 数据准备 ==========
 if predicted_app not in ('AES','MD5','SHA256'):
