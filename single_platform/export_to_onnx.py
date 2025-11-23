@@ -66,6 +66,7 @@ def create_cubic_onnx(params, model_name="cubic_model"):
     
     # Create model
     model_def = helper.make_model(graph_def, producer_name='time_prediction')
+    model_def.ir_version = 9
     model_def.opset_import[0].version = 13
     
     # Check model
@@ -121,6 +122,7 @@ def create_quadratic_onnx(params, model_name="quad_model"):
     
     # Create model
     model_def = helper.make_model(graph_def, producer_name='time_prediction')
+    model_def.ir_version = 9
     model_def.opset_import[0].version = 13
     
     # Check model
@@ -163,6 +165,7 @@ def create_linear_onnx(params, model_name="linear_model"):
     
     # Create model
     model_def = helper.make_model(graph_def, producer_name='time_prediction')
+    model_def.ir_version = 9
     model_def.opset_import[0].version = 13
     
     # Check model
@@ -215,6 +218,7 @@ def create_fft_onnx(params, model_name="fft_model"):
     
     # Create model
     model_def = helper.make_model(graph_def, producer_name='time_prediction')
+    model_def.ir_version = 9
     model_def.opset_import[0].version = 13
     
     # Check model
@@ -346,6 +350,7 @@ def create_ensemble_onnx(models_info, model_name="ensemble_model"):
     
     # Create model
     model_def = helper.make_model(graph_def, producer_name='time_prediction')
+    model_def.ir_version = 9
     model_def.opset_import[0].version = 13
     
     # Check model
@@ -448,7 +453,8 @@ def export_sklearn_model_to_onnx(model, scaler, input_dim=1, model_name="sklearn
             initial_types=initial_type,
             target_opset=13
         )
-        
+        onnx_model.ir_version = 9
+
         return onnx_model
     
     except ImportError as e:
@@ -522,6 +528,7 @@ def export_xgboost_to_onnx(model, input_dim=1, model_name="xgboost_model"):
             initial_types=initial_type,
             target_opset=13
         )
+        onnx_model.ir_version = 9
         
         # Rename input from 'float_input' to 'input' for consistency
         if onnx_model.graph.input[0].name == 'float_input':
@@ -573,6 +580,7 @@ def export_hybrid_model_to_onnx(base_func, base_params, res_model,
             initial_types=initial_type,
             target_opset=13
         )
+        res_onnx.ir_version = 9
         
         # For curve-based base: create base ONNX, export separately
         if base_params is not None:
@@ -641,6 +649,7 @@ def export_hybrid_model_to_onnx(base_func, base_params, res_model,
                 initial_types=base_initial_type,
                 target_opset=13
             )
+            base_onnx.ir_version = 9
             
             # Return a dict with both models instead of combined
             return {'base': base_onnx, 'residual': res_onnx, 'type': 'separate_hybrid'}
@@ -749,6 +758,7 @@ def create_combined_hybrid_onnx(base_onnx_path, res_onnx_path, model_name="hybri
     
     # Create model
     model_def = helper.make_model(graph_def, producer_name='time_prediction_hybrid')
+    model_def.ir_version = 9
     model_def.opset_import[0].version = 13
     
     # Add ONNX-ML opset for sklearn models (TreeEnsembleRegressor)
